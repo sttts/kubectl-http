@@ -1,0 +1,72 @@
+#!/bin/bash
+
+# Script name: kubectl-http
+# Location: Any directory in your PATH (e.g., /usr/local/bin/)
+
+# Check for the existence of the httpie tool
+if ! command -v http &> /dev/null; then
+    echo "Error: httpie is not installed. Please install it to use this script."
+    exit 1
+fi
+
+# Extract the current context's API server, token, and certificates
+APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
+TOKEN=$(kubectl config view --minify -o jsonpath='{.users[0].user.token}')
+CA_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
+CLIENT_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
+CLIENT_KEY_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+
+# Validate extracted data
+if [ -z "$APISERVER" ]; then
+    echo "Error: API server URL could not be found in the kubeconfig."
+    exit 1
+fi
+
+# Create temporary files for CA, client certificate, and client key
+CA_CERT=$(mktemp)
+CLIENT_CERT=$(mktemp)
+CLIENT_KEY=$(mktemp)
+
+# Verify temporary files were created
+if [ ! -f "$CA_CERT" ] || [ ! -f "$CLIENT_CERT" ] || [ ! -f "$CLIENT_KEY" ]; then
+    echo "Error: Failed to create temporary files."
+    exit 1
+fi
+
+# Clean up temporary files on exit
+trap 'rm -f "$CA_CERT" "$CLIENT_CERT" "$CLIENT_KEY"' EXIT
+
+# Decode and save the certificate and key data
+echo "$CA_CERT_DATA" | base64 -d > "$CA_CERT"
+echo "$CLIENT_CERT_DATA" | base64 -d > "$CLIENT_CERT"
+echo "$CLIENT_KEY_DATA" | base64 -d > "$CLIENT_KEY"
+
+# Process the arguments to prepend the APISERVER to the first argument starting with '/'
+ARGS=()
+URL_PREPENDED=false
+for arg in "$@"; do
+    if [[ $URL_PREPENDED == false && ${arg:0:1} == '/' ]]; then
+        ARGS+=("${APISERVER}${arg}")
+        URL_PREPENDED=true
+    else
+        ARGS+=("$arg")
+    fi
+done
+
+# Determine the authentication method (token or client certificates)
+if [ -n "$TOKEN" ]; then
+    # Token-based authentication
+    AUTH_HEADER="Authorization: Bearer $TOKEN"
+    http --verify "$CA_CERT" \
+         --default-header "$AUTH_HEADER" \
+         "${ARGS[@]}"
+elif [ -n "$CLIENT_CERT_DATA" ] && [ -n "$CLIENT_KEY_DATA" ]; then
+    # Client certificate-based authentication
+    http --verify "$CA_CERT" \
+         --cert "$CLIENT_CERT" \
+         --cert-key "$CLIENT_KEY" \
+         "${ARGS[@]}"
+else
+    echo "No valid authentication method found for the current context."
+    exit 1
+fi
