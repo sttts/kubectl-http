@@ -11,7 +11,7 @@ fi
 
 # Extract the current context's API server, token, and certificates
 APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-TOKEN=$(kubectl config view --minify -o jsonpath='{.users[0].user.token}')
+TOKEN=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.token}')
 CA_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
 CLIENT_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
 CLIENT_KEY_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
@@ -56,9 +56,9 @@ done
 # Determine the authentication method (token or client certificates)
 if [ -n "$TOKEN" ]; then
     # Token-based authentication
-    AUTH_HEADER="Authorization: Bearer $TOKEN"
     http --verify "$CA_CERT" \
-         --default-header "$AUTH_HEADER" \
+         -A bearer \
+         -a "$TOKEN" \
          "${ARGS[@]}"
 elif [ -n "$CLIENT_CERT_DATA" ] && [ -n "$CLIENT_KEY_DATA" ]; then
     # Client certificate-based authentication
