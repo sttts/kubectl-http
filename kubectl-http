@@ -10,11 +10,14 @@ if ! command -v http &> /dev/null; then
 fi
 
 # Extract the current context's API server, token, and certificates
-APISERVER=$(kubectl config view --minify -o jsonpath='{.clusters[0].cluster.server}')
-TOKEN=$(kubectl config view --minify -o jsonpath='{.users[0].user.token}')
-CA_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
-CLIENT_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
-CLIENT_KEY_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+CURRENT_CONTEXT=$(kubectl config view --minify -o jsonpath="{.current-context}")
+CURRENT_CONTEXT_CLUSTER=$(kubectl config view --minify -o jsonpath="{.contexts[?(@.name==\""$CURRENT_CONTEXT"\")].context.cluster}")
+CURRENT_CONTEXT_USER=$(kubectl config view --minify -o jsonpath="{.contexts[?(@.name==\""$CURRENT_CONTEXT"\")].context.user}")
+APISERVER=$(kubectl config view --minify -o jsonpath="{.clusters[?(@.name==\""$CURRENT_CONTEXT_CLUSTER"\")].cluster.server}")
+TOKEN=$(kubectl config view --minify -o jsonpath="{.users[?(@.name==\""$CURRENT_CONTEXT_USER"\")].user.token}")
+CA_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath="{.clusters[?(@.name==\""$CURRENT_CONTEXT_CLUSTER"\")].cluster.certificate-authority-data}")
+CLIENT_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath="{.users[?(@.name==\""$CURRENT_CONTEXT_USER"\")].user.client-certificate-data}")
+CLIENT_KEY_DATA=$(kubectl config view --minify --raw -o jsonpath="{.users[?(@.name==\""$CURRENT_CONTEXT_USER"\")].user.client-key-data}")
 
 # Validate extracted data
 if [ -z "$APISERVER" ]; then
