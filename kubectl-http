@@ -58,8 +58,7 @@ if [ -n "$TOKEN" ]; then
     # Token-based authentication
     AUTH_HEADER="Authorization: Bearer $TOKEN"
     http --verify "$CA_CERT" \
-         --default-header "$AUTH_HEADER" \
-         "${ARGS[@]}"
+         "${ARGS[@]}" "$AUTH_HEADER"
 elif [ -n "$CLIENT_CERT_DATA" ] && [ -n "$CLIENT_KEY_DATA" ]; then
     # Client certificate-based authentication
     http --verify "$CA_CERT" \
