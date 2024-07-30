@@ -15,6 +15,10 @@ TOKEN=$(kubectl config view --minify -o jsonpath='{.users[0].user.token}')
 CA_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.clusters[0].cluster.certificate-authority-data}')
 CLIENT_CERT_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-certificate-data}')
 CLIENT_KEY_DATA=$(kubectl config view --minify --raw -o jsonpath='{.users[0].user.client-key-data}')
+# Extract parameters for exec credentials
+EXEC_COMMAND=$(kubectl config view --minify -o jsonpath='{.users[0].user.exec.command}')
+EXEC_ARGS=$(kubectl config view --minify -o jsonpath='{.users[0].user.exec.args[*]}')
+EXEC_ENV=$(kubectl config view --minify -o jsonpath='{range .users[0].user.exec.env[*]}{.name}{"="}{.value}{" "}{end}')
 
 # Validate extracted data
 if [ -z "$APISERVER" ]; then
@@ -52,6 +56,18 @@ for arg in "$@"; do
         ARGS+=("$arg")
     fi
 done
+
+# If using exec credentials, try to fetch a token.
+if [ -n "$EXEC_COMMAND" ]; then
+    if [ -n "$EXEC_ENV" ]; then
+        export $EXEC_ENV
+    fi
+    TOKEN_CMD="${EXEC_COMMAND}"
+    for arg in "$EXEC_ARGS"; do
+        TOKEN_CMD="${TOKEN_CMD} ${arg}"
+    done
+    TOKEN=$($TOKEN_CMD | jq -r '.status.token')
+fi
 
 # Determine the authentication method (token or client certificates)
 if [ -n "$TOKEN" ]; then
